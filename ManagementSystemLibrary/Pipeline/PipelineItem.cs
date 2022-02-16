@@ -46,9 +46,9 @@ namespace ManagementSystemLibrary.Pipeline
         public int ID { get; }
 
         /// <summary>
-        /// Gets the <see cref="TaskCompletionSource{T}"/> that indicates the completion of the execution.
+        /// Gets the <see cref="TaskCompletionSource"/> that indicates the completion of the execution.
         /// </summary>
-        public TaskCompletionSource<bool> ExecutionCompleted { get; } = new ();
+        public TaskCompletionSource ExecutionCompleted { get; } = new ();
 
         /// <summary>
         /// Executes the <see cref="PipelineItem"/> asynchrously.

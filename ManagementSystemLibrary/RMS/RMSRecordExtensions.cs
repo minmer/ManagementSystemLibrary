@@ -64,42 +64,6 @@ namespace ManagementSystemLibrary.RMS
             return (await parent.LoadItemsAsync<RMSRecord, MSDatabaseObject>().ConfigureAwait(false)).Select(id => new RMSRecord(parent, id));
         }
 
-        /// <summary>
-        /// Converts an <see cref="object"/> into a <see cref="IEnumerable{T}"/>.
-        /// </summary>
-        /// <param name="obj">The <see cref="object"/> to convert.</param>
-        /// <returns>The converted <see cref="IEnumerable{T}"/>.</returns>
-        internal static IEnumerable<byte> GetBytes(this object obj)
-        {
-            if (obj is byte byteObject)
-            {
-                return new byte[] { 0, byteObject };
-            }
-
-            return Array.Empty<byte>();
-        }
-
-        /// <summary>
-        /// Converts a <see cref="T:Byte[]"/> into an <see cref="object"/>.
-        /// </summary>
-        /// <param name="array">The <see cref="T:Byte[]"/> to convert.</param>
-        /// <returns>The converted <see cref="object"/>.</returns>
-        internal static object? GetObject(this byte[] array)
-        {
-            if (array.Length > 0)
-            {
-                switch (array[0])
-                {
-                    case 0:
-                        {
-                            return array[1];
-                        }
-                }
-            }
-
-            return null;
-        }
-
         private static Func<PipelineItem, NpgsqlCommand, bool> SearchRecordBatchCommand(MSDatabaseObject parent)
         {
             return (PipelineItem item, NpgsqlCommand command) =>

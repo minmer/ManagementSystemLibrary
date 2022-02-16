@@ -77,7 +77,7 @@ namespace ManagementSystemLibrary.RMS
             if (this.record is null
                 && await this.GetDataAsync().ConfigureAwait(false) is byte[] array)
             {
-                this.record = array.GetObject();
+                this.record = array.GetObject(this.GetAccessParent().Association);
                 this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Record)));
             }
 

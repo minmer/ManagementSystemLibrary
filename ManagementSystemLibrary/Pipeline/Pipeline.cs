@@ -146,7 +146,7 @@ namespace ManagementSystemLibrary.Pipeline
                     if (this.executedItems[commandIndex].FirstOrDefault(item => item.ID == reader.GetInt64(0)) is PipelineItem pipelineItem)
                     {
                         pipelineItem.ReaderExecution?.Invoke(reader);
-                        pipelineItem.ExecutionCompleted.TrySetResult(true);
+                        pipelineItem.ExecutionCompleted.TrySetResult();
                     }
                 }
             }

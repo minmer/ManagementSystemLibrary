@@ -126,6 +126,18 @@ namespace ManagementSystemLibrary.SMS
         }
 
         /// <summary>
+        /// Executes the <see cref="SMSTask"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task ExecuteAsync()
+        {
+            if (await this.GetScenarioAsync().ConfigureAwait(false) is SMSScenario scenario)
+            {
+                await scenario.ExecuteAsync().ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
         /// Gets the <see cref="SMSScenario"/> of the <see cref="SMSTask"/>.
         /// </summary>
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>

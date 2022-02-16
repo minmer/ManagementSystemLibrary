@@ -23,10 +23,15 @@ namespace ManagementSystemLibrary.SMS
             { SMSConditionType.LogicOr, EvaluateLogicOr },
             { SMSConditionType.LogicXor, EvaluateLogicXor },
             { SMSConditionType.LogicNot, EvaluateLogicNot },
-            { SMSConditionType.LogicNot, EvaluateLogicNot },
+            { SMSConditionType.Message, EvaluateMessage },
+            { SMSConditionType.QuestionYesNo, EvaluateQuestionYesNo },
+            { SMSConditionType.IdentityCheck, EvaluateIdentityCheck },
+            { SMSConditionType.Start, EvaluateStatic },
+            { SMSConditionType.Static, EvaluateStatic },
         };
 
         private SMSConditionType? type;
+        private object? value;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SMSCondition"/> class.
@@ -39,14 +44,24 @@ namespace ManagementSystemLibrary.SMS
         }
 
         /// <summary>
-        /// Gets or sets an array of input <see cref="SMSBond"/>.
+        /// Gets or sets an function for a message.
         /// </summary>
-        public SMSBond[]? Inputs { get; set; }
+        public static Func<string, string, Task>? InvokeMessageAsync { get; set; }
 
         /// <summary>
-        /// Gets or sets an array of output <see cref="SMSBond"/>.
+        /// Gets or sets an function for a question with yes/no answer.
         /// </summary>
-        public SMSBond[]? Outputs { get; set; }
+        public static Func<string, string, Task<bool>>? InvokeQuestionYesNoAsync { get; set; }
+
+        /// <summary>
+        /// Gets a list of input <see cref="SMSBond"/>.
+        /// </summary>
+        public List<SMSBond> Inputs { get; } = new ();
+
+        /// <summary>
+        /// Gets a list of output <see cref="SMSBond"/>.
+        /// </summary>
+        public List<SMSBond> Outputs { get; } = new();
 
         /// <summary>
         /// Gets or sets the type of the <see cref="SMSCondition"/>.
@@ -62,6 +77,23 @@ namespace ManagementSystemLibrary.SMS
             set
             {
                 _ = this.SaveTypeAsync(value);
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the value of the <see cref="SMSCondition"/>.
+        /// </summary>
+        public object? Value
+        {
+            get
+            {
+                _ = this.GetValueAsync();
+                return this.value;
+            }
+
+            set
+            {
+                _ = this.SaveValueAsync(value);
             }
         }
 
@@ -86,13 +118,11 @@ namespace ManagementSystemLibrary.SMS
         /// </summary>
         public void Evaluate()
         {
-            if (this.Inputs is not null
-                && this.Outputs is not null
-                && this.type is not null)
+            if (this.type is not null)
             {
                 if (ConditionEvaluation.ContainsKey(this.type.Value))
                 {
-                    ConditionEvaluation[this.type.Value](this.Inputs, this.Outputs);
+                    ConditionEvaluation[this.type.Value](this.Inputs.ToArray(), this.Outputs.ToArray());
                 }
             }
         }
@@ -114,6 +144,29 @@ namespace ManagementSystemLibrary.SMS
         }
 
         /// <summary>
+        /// Gets the <see cref="Value"/> of the <see cref="SMSCondition"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task<object?> GetValueAsync()
+        {
+            if (this.value is null
+                && await this.GetDataAsync().ConfigureAwait(false) is byte[] array
+                && array?.Length > 1
+                && await this.GetTypeAsync().ConfigureAwait(false) is SMSConditionType type)
+            {
+                if (type == SMSConditionType.Start
+                    | type == SMSConditionType.Static)
+                {
+                    this.value = array[1..].GetObject(this.Parent.Association);
+                    this.Inputs.Add(new SMSBond(this.Parent, -1) { Value = this.value });
+                    this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Value)));
+                }
+            }
+
+            return this.value;
+        }
+
+        /// <summary>
         /// Saves the <see cref="Type"/> of the <see cref="SMSCondition"/>.
         /// </summary>
         /// <param name="value">The new value.</param>
@@ -126,6 +179,23 @@ namespace ManagementSystemLibrary.SMS
                 this.type = value;
                 this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Type)));
                 await this.SaveDataAsync(new byte[] { (byte)this.type }).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Saves the <see cref="Value"/> of the <see cref="SMSCondition"/>.
+        /// </summary>
+        /// <param name="value">The new value.</param>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task SaveValueAsync(object? value)
+        {
+            if (this.value != value
+                && value is not null
+                && await this.GetTypeAsync().ConfigureAwait(false) is SMSConditionType type)
+            {
+                this.value = value;
+                this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Value)));
+                await this.SaveDataAsync(new byte[] { (byte)type }.Concat(this.value.GetBytes()).ToArray()).ConfigureAwait(false);
             }
         }
 
@@ -201,16 +271,110 @@ namespace ManagementSystemLibrary.SMS
 
         private static void EvaluateLogicNot(SMSBond[] inputs, SMSBond[] outputs)
         {
-            bool? outputValue = inputs.Length != 1;
+            bool? outputValue = inputs.Length == 1;
             if (inputs.ElementAtOrDefault(0)?.Value is bool booleanValue
-                && outputValue is null)
+                && outputValue is true)
             {
                 outputValue = !booleanValue;
+            }
+            else
+            {
+                outputValue = null;
             }
 
             foreach (SMSBond output in outputs)
             {
                 output.Value = outputValue;
+            }
+        }
+
+        private static void EvaluateMessage(SMSBond[] inputs, SMSBond[] outputs)
+        {
+            if (inputs.FirstOrDefault(input => input.OutputIndex == 0)?.Value is bool isVisible
+                && inputs.FirstOrDefault(input => input.OutputIndex == 1)?.Value is string title
+                && inputs.FirstOrDefault(input => input.OutputIndex == 2)?.Value is string message
+                && InvokeMessageAsync is not null)
+            {
+                if (isVisible)
+                {
+                    Task.Run(async () =>
+                    {
+                        await InvokeMessageAsync(title, message).ConfigureAwait(false);
+                        foreach (SMSBond output in outputs)
+                        {
+                            output.Value = true;
+                        }
+                    });
+                }
+            }
+        }
+
+        private static void EvaluateQuestionYesNo(SMSBond[] inputs, SMSBond[] outputs)
+        {
+            if (inputs.FirstOrDefault(input => input.OutputIndex == 0)?.Value is bool isVisible
+                && inputs.FirstOrDefault(input => input.OutputIndex == 1)?.Value is string title
+                && inputs.FirstOrDefault(input => input.OutputIndex == 2)?.Value is string message
+                && InvokeQuestionYesNoAsync is not null)
+            {
+                if (isVisible)
+                {
+                    Task.Run(async () =>
+                    {
+                        bool outputValue = await InvokeQuestionYesNoAsync(title, message).ConfigureAwait(false);
+                        foreach (SMSBond output in outputs)
+                        {
+                            output.Value = outputValue;
+                        }
+                    });
+                }
+            }
+        }
+
+        private static void EvaluateIdentityCheck(SMSBond[] inputs, SMSBond[] outputs)
+        {
+            bool? outputValue = inputs.Length > 1;
+            if (outputValue == true)
+            {
+                if (inputs.FirstOrDefault()?.Value is MSDatabaseObject reference)
+                {
+                    foreach (SMSBond input in inputs)
+                    {
+                        if (input.Value is MSDatabaseObject pair)
+                        {
+                            if (pair.GetType() != reference.GetType()
+                                | pair.ID != reference.ID)
+                            {
+                                outputValue = false;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            outputValue = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                outputValue = null;
+            }
+
+            foreach (SMSBond output in outputs)
+            {
+                output.Value = outputValue;
+            }
+        }
+
+        private static void EvaluateStatic(SMSBond[] inputs, SMSBond[] outputs)
+        {
+            if (inputs.FirstOrDefault()?.Value is object value)
+            {
+                foreach (SMSBond output in outputs)
+                {
+                    output.Value = value;
+                }
             }
         }
     }

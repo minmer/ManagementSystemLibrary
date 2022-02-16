@@ -89,6 +89,50 @@ namespace ManagementSystemLibrary.SMS
         }
 
         /// <summary>
+        /// Executes the <see cref="SMSScenario"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task ExecuteAsync()
+        {
+            SMSCondition[] conditions = (await LoadConditionsAsync().ConfigureAwait(false)).ToArray();
+            SMSBond[] bonds = (await LoadBondsAsync().ConfigureAwait(false)).ToArray();
+            foreach(SMSBond bond in bonds)
+            {
+                await bond.GetBondAsync().ConfigureAwait(false);
+                if (conditions.FirstOrDefault(condition => condition.ID == bond.InputID) is SMSCondition inputCondition)
+                {
+                    bond.Input = inputCondition;
+                    inputCondition.Outputs.Add(bond);
+                }
+
+                if (conditions.FirstOrDefault(condition => condition.ID == bond.OutputID) is SMSCondition outputCondition)
+                {
+                    bond.Output = outputCondition;
+                    outputCondition.Inputs.Add(bond);
+                }
+            }
+
+            for (int index = 0; index < conditions.Length; index++)
+            {
+                if (await conditions[index].GetTypeAsync().ConfigureAwait(false) == SMSConditionType.Static
+                    | await conditions[index].GetTypeAsync().ConfigureAwait(false) == SMSConditionType.Start)
+                {
+                    _ = await conditions[index].GetValueAsync().ConfigureAwait(false);
+                }
+            }
+
+            foreach (SMSCondition staticCondition in conditions.Where(condition => condition.Type == SMSConditionType.Static))
+            {
+                staticCondition.Evaluate();
+            }
+
+            foreach (SMSCondition startCondition in conditions.Where(condition => condition.Type == SMSConditionType.Start))
+            {
+                startCondition.Evaluate();
+            }
+        }
+
+        /// <summary>
         /// Loads <see cref="SMSContender"/> related to the <see cref="SMSScenario"/>.
         /// </summary>
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
@@ -104,6 +148,15 @@ namespace ManagementSystemLibrary.SMS
         public async Task<IEnumerable<SMSCondition>> LoadConditionsAsync()
         {
             return (await this.LoadItemsAsync<SMSCondition, SMSScenario>().ConfigureAwait(false)).Select(id => new SMSCondition(this, id));
+        }
+
+        /// <summary>
+        /// Loads <see cref="SMSBond"/> related to the <see cref="SMSScenario"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task<IEnumerable<SMSBond>> LoadBondsAsync()
+        {
+            return (await this.LoadItemsAsync<SMSBond, SMSScenario>().ConfigureAwait(false)).Select(id => new SMSBond(this, id));
         }
     }
 }
