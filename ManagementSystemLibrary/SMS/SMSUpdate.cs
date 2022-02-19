@@ -23,6 +23,7 @@ namespace ManagementSystemLibrary.SMS
     public class SMSUpdate : MSTimeObject<SMSUpdate, SMSSkill>
     {
         private double? amount;
+        private string? name;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SMSUpdate"/> class.
@@ -47,6 +48,18 @@ namespace ManagementSystemLibrary.SMS
         }
 
         /// <summary>
+        /// Gets the name of the <see cref="SMSUpdate"/>.
+        /// </summary>
+        public string? Name
+        {
+            get
+            {
+                _ = this.GetNameAsync();
+                return this.name;
+            }
+        }
+
+        /// <summary>
         /// Creates a new <see cref="SMSUpdate"/>.
         /// </summary>
         /// <param name="parent">The parent of the created <see cref="SMSUpdate"/>.</param>
@@ -55,7 +68,7 @@ namespace ManagementSystemLibrary.SMS
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
         public static async Task<SMSUpdate?> CreateAsync(SMSSkill parent, string name, double amount)
         {
-            if (await MSTimeObject<SMSUpdate, SMSSkill>.CreateAsync(parent, name, BitConverter.GetBytes(amount), DateTime.Now, null) is long id)
+            if (await MSTimeObject<SMSUpdate, SMSSkill>.CreateAsync(parent, name, BitConverter.GetBytes(amount).Concat(Encoding.Unicode.GetBytes(name)).ToArray(), DateTime.Now, null) is long id)
             {
                 return new (parent, id);
             }
@@ -77,6 +90,22 @@ namespace ManagementSystemLibrary.SMS
             }
 
             return this.amount;
+        }
+
+        /// <summary>
+        /// Gets the <see cref="Name"/> of the <see cref="SMSUpdate"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task<string?> GetNameAsync()
+        {
+            if (this.name is null
+                && await this.GetDataAsync().ConfigureAwait(false) is byte[] array)
+            {
+                this.name = Encoding.Unicode.GetString(array[8..]);
+                this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Name)));
+            }
+
+            return this.name;
         }
     }
 }

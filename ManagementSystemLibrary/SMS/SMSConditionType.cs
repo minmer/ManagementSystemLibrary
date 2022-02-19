@@ -47,7 +47,7 @@ namespace ManagementSystemLibrary.SMS
         QuestionYesNo = 6,
 
         /// <summary>
-        /// A identity check for <see cref="MSDatabaseObject"/> <see cref="SMSCondition"/>.
+        /// An identity check for <see cref="MSDatabaseObject"/> <see cref="SMSCondition"/>.
         /// </summary>
         IdentityCheck = 7,
 
@@ -60,6 +60,36 @@ namespace ManagementSystemLibrary.SMS
         /// A static <see cref="SMSCondition"/>.
         /// </summary>
         Static = 9,
+
+        /// <summary>
+        /// An input <see cref="SMSCondition"/>.
+        /// </summary>
+        Input = 10,
+
+        /// <summary>
+        /// An output <see cref="SMSCondition"/>.
+        /// </summary>
+        Output = 11,
+
+        /// <summary>
+        /// A skill update <see cref="SMSCondition"/>.
+        /// </summary>
+        SkillUpdate = 12,
+
+        /// <summary>
+        /// An if statement <see cref="SMSCondition"/>.
+        /// </summary>
+        IfStatement = 13,
+
+        /// <summary>
+        /// An if-else statement <see cref="SMSCondition"/>.
+        /// </summary>
+        IfElseStatement = 43,
+
+        /// <summary>
+        /// A reset <see cref="SMSCondition"/>.
+        /// </summary>
+        Reset = 15,
 
         /// <summary>
         /// A <see cref="SMSTask"/> as a <see cref="SMSCondition"/>.

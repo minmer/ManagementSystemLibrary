@@ -20,6 +20,8 @@ namespace ManagementSystemLibrary.SMS
     /// </summary>
     public class SMSScenario : MSAccessObject
     {
+        private SMSCondition[]? conditions;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="SMSScenario"/> class.
         /// </summary>
@@ -92,44 +94,17 @@ namespace ManagementSystemLibrary.SMS
         /// Executes the <see cref="SMSScenario"/>.
         /// </summary>
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-        public async Task ExecuteAsync()
+        public async Task<IEnumerable<SMSCondition>> PrepareAsync()
         {
-            SMSCondition[] conditions = (await LoadConditionsAsync().ConfigureAwait(false)).ToArray();
-            SMSBond[] bonds = (await LoadBondsAsync().ConfigureAwait(false)).ToArray();
-            foreach(SMSBond bond in bonds)
+            if (this.conditions is null)
             {
-                await bond.GetBondAsync().ConfigureAwait(false);
-                if (conditions.FirstOrDefault(condition => condition.ID == bond.InputID) is SMSCondition inputCondition)
-                {
-                    bond.Input = inputCondition;
-                    inputCondition.Outputs.Add(bond);
-                }
-
-                if (conditions.FirstOrDefault(condition => condition.ID == bond.OutputID) is SMSCondition outputCondition)
-                {
-                    bond.Output = outputCondition;
-                    outputCondition.Inputs.Add(bond);
-                }
+                this.conditions = (await this.LoadConditionsAsync().ConfigureAwait(false)).ToArray();
+                SMSBond[] bonds = (await this.LoadBondsAsync().ConfigureAwait(false)).ToArray();
+                await PrepareBondsAsync(this.conditions, bonds).ConfigureAwait(false);
+                await PrepareStaticConditionsAsync(this.conditions).ConfigureAwait(false);
             }
 
-            for (int index = 0; index < conditions.Length; index++)
-            {
-                if (await conditions[index].GetTypeAsync().ConfigureAwait(false) == SMSConditionType.Static
-                    | await conditions[index].GetTypeAsync().ConfigureAwait(false) == SMSConditionType.Start)
-                {
-                    _ = await conditions[index].GetValueAsync().ConfigureAwait(false);
-                }
-            }
-
-            foreach (SMSCondition staticCondition in conditions.Where(condition => condition.Type == SMSConditionType.Static))
-            {
-                staticCondition.Evaluate();
-            }
-
-            foreach (SMSCondition startCondition in conditions.Where(condition => condition.Type == SMSConditionType.Start))
-            {
-                startCondition.Evaluate();
-            }
+            return this.conditions;
         }
 
         /// <summary>
@@ -157,6 +132,44 @@ namespace ManagementSystemLibrary.SMS
         public async Task<IEnumerable<SMSBond>> LoadBondsAsync()
         {
             return (await this.LoadItemsAsync<SMSBond, SMSScenario>().ConfigureAwait(false)).Select(id => new SMSBond(this, id));
+        }
+
+        private static async Task PrepareBondsAsync(SMSCondition[] conditions, SMSBond[] bonds)
+        {
+            foreach (SMSBond bond in bonds)
+            {
+                await bond.GetBondAsync().ConfigureAwait(false);
+                if (conditions.FirstOrDefault(condition => condition.ID == bond.InputID) is SMSCondition inputCondition)
+                {
+                    bond.Input = inputCondition;
+                    inputCondition.Outputs.Add(bond);
+                }
+
+                if (conditions.FirstOrDefault(condition => condition.ID == bond.OutputID) is SMSCondition outputCondition)
+                {
+                    bond.Output = outputCondition;
+                    outputCondition.Inputs.Add(bond);
+                }
+            }
+        }
+
+        private static async Task PrepareStaticConditionsAsync(SMSCondition[] conditions)
+        {
+            for (int index = 0; index < conditions.Length; index++)
+            {
+                if (await conditions[index].GetTypeAsync().ConfigureAwait(false) == SMSConditionType.Static
+                    | conditions[index].Type == SMSConditionType.Start
+                    | conditions[index].Type == SMSConditionType.Output
+                    | conditions[index].Type == SMSConditionType.Task)
+                {
+                    _ = await conditions[index].GetValueAsync().ConfigureAwait(false);
+                }
+            }
+
+            foreach (SMSCondition staticCondition in conditions.Where(condition => condition.Type == SMSConditionType.Static))
+            {
+                staticCondition.Evaluate();
+            }
         }
     }
 }

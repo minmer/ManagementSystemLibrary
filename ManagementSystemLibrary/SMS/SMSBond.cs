@@ -20,6 +20,7 @@ namespace ManagementSystemLibrary.SMS
         private SMSCondition? input;
         private long? inputID;
         private int? inputIndex;
+        private bool? isStatic;
         private SMSCondition? output;
         private long? outputID;
         private int? outputIndex;
@@ -90,6 +91,24 @@ namespace ManagementSystemLibrary.SMS
         }
 
         /// <summary>
+        /// Gets or sets a value indicating whether the <see cref="SMSBond"/> should be evaluated only for ne values.
+        /// </summary>
+        public bool? IsStatic
+        {
+            get
+            {
+                _ = this.GetBondAsync();
+                return this.isStatic;
+            }
+
+            set
+            {
+                this.isStatic = value;
+                _ = this.SaveBondAsync();
+            }
+        }
+
+        /// <summary>
         /// Gets or sets the output <see cref="SMSBond"/>.
         /// </summary>
         public SMSCondition? Output
@@ -155,7 +174,8 @@ namespace ManagementSystemLibrary.SMS
 
             set
             {
-                if (this.value != value)
+                if (this.value != value
+                    | this.isStatic == false)
                 {
                     this.value = value;
                     this.Output?.Evaluate();
@@ -171,10 +191,11 @@ namespace ManagementSystemLibrary.SMS
         /// <param name="output">The output <see cref="SMSCondition"/> of the created <see cref="SMSBond"/>.</param>
         /// <param name="outputIndex">The index of output <see cref="SMSCondition"/>.</param>
         /// <param name="name">The name of the created <see cref="SMSBond"/>.</param>
+        /// <param name="isStatic">Determines, whether the <see cref="SMSBond"/> evaluate only for new values.</param>
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-        public static async Task<SMSBond?> CreateAsync(SMSCondition input, int inputIndex, SMSCondition output, int outputIndex, string name)
+        public static async Task<SMSBond?> CreateAsync(SMSCondition input, int inputIndex, SMSCondition output, int outputIndex, string name, bool isStatic)
         {
-            if (await CreateAsync<SMSBond>(input.Parent, name, BitConverter.GetBytes(input.ID).Concat(BitConverter.GetBytes(inputIndex)).Concat(BitConverter.GetBytes(output.ID)).Concat(BitConverter.GetBytes(outputIndex)).ToArray(), null) is long id)
+            if (await CreateAsync<SMSBond>(input.Parent, name, BitConverter.GetBytes(input.ID).Concat(BitConverter.GetBytes(inputIndex)).Concat(BitConverter.GetBytes(output.ID)).Concat(BitConverter.GetBytes(outputIndex)).Concat(BitConverter.GetBytes(isStatic)).ToArray(), null) is long id)
             {
                 return new (input.Parent, id) { Input = input, Output = output };
             }
@@ -190,6 +211,7 @@ namespace ManagementSystemLibrary.SMS
         {
             if ((this.inputID is null
                 | this.inputIndex is null
+                | this.isStatic is null
                 | this.outputID is null
                 | this.outputIndex is null)
                 && await this.GetDataAsync().ConfigureAwait(false) is byte[] array)
@@ -198,6 +220,7 @@ namespace ManagementSystemLibrary.SMS
                 this.inputIndex ??= BitConverter.ToInt32(array, 8);
                 this.outputID ??= BitConverter.ToInt64(array, 12);
                 this.outputIndex ??= BitConverter.ToInt32(array, 20);
+                this.isStatic ??= BitConverter.ToBoolean(array, 24);
                 this.OnParametersChanged();
             }
         }
@@ -211,11 +234,12 @@ namespace ManagementSystemLibrary.SMS
             await this.GetBondAsync().ConfigureAwait(false);
             if (this.inputID is not null
                 && this.inputIndex is not null
+                && this.isStatic is not null
                 && this.outputID is not null
                 && this.outputIndex is not null)
             {
                 this.OnParametersChanged();
-                await this.SaveDataAsync(BitConverter.GetBytes(this.inputID.Value).Concat(BitConverter.GetBytes(this.inputIndex.Value)).Concat(BitConverter.GetBytes(this.outputID.Value)).Concat(BitConverter.GetBytes(this.outputIndex.Value)).ToArray()).ConfigureAwait(false);
+                await this.SaveDataAsync(BitConverter.GetBytes(this.inputID.Value).Concat(BitConverter.GetBytes(this.inputIndex.Value)).Concat(BitConverter.GetBytes(this.outputID.Value)).Concat(BitConverter.GetBytes(this.outputIndex.Value)).Concat(BitConverter.GetBytes(this.isStatic.Value)).ToArray()).ConfigureAwait(false);
             }
         }
 
@@ -223,6 +247,7 @@ namespace ManagementSystemLibrary.SMS
         {
             this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.InputID)));
             this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.InputIndex)));
+            this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.IsStatic)));
             this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.OutputID)));
             this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.OutputIndex)));
         }

@@ -28,6 +28,11 @@ namespace ManagementSystemLibrary.SMS
             { SMSConditionType.IdentityCheck, EvaluateIdentityCheck },
             { SMSConditionType.Start, EvaluateStatic },
             { SMSConditionType.Static, EvaluateStatic },
+            { SMSConditionType.Input, EvaluateStatic },
+            { SMSConditionType.SkillUpdate, EvaluateSkillUpdate },
+            { SMSConditionType.IfStatement, EvaluateIfStatement },
+            { SMSConditionType.IfElseStatement, EvaluateIfElseStatement },
+            { SMSConditionType.Reset, EvaluateReset },
         };
 
         private SMSConditionType? type;
@@ -42,6 +47,11 @@ namespace ManagementSystemLibrary.SMS
             : base(scenario, id)
         {
         }
+
+        /// <summary>
+        /// Occurs when an output value changed.
+        /// </summary>
+        public event EventHandler<SMSOutputEventArgs>? OutputChanged;
 
         /// <summary>
         /// Gets or sets an function for a message.
@@ -61,7 +71,7 @@ namespace ManagementSystemLibrary.SMS
         /// <summary>
         /// Gets a list of output <see cref="SMSBond"/>.
         /// </summary>
-        public List<SMSBond> Outputs { get; } = new();
+        public List<SMSBond> Outputs { get; } = new ();
 
         /// <summary>
         /// Gets or sets the type of the <see cref="SMSCondition"/>.
@@ -124,6 +134,19 @@ namespace ManagementSystemLibrary.SMS
                 {
                     ConditionEvaluation[this.type.Value](this.Inputs.ToArray(), this.Outputs.ToArray());
                 }
+                else if (this.type.Value == SMSConditionType.Output
+                    && (this.value ?? -1) is int index)
+                {
+                    this.OnOutputChanged(new SMSOutputEventArgs { Index = index, Value = this.Inputs.FirstOrDefault(input => input.Value is not null)?.Value });
+                }
+                else if (this.type.Value == SMSConditionType.Task
+                    && this.value is SMSTask task)
+                {
+                    this.EvaluateTask(task);
+                }
+                else
+                {
+                }
             }
         }
 
@@ -155,10 +178,26 @@ namespace ManagementSystemLibrary.SMS
                 && await this.GetTypeAsync().ConfigureAwait(false) is SMSConditionType type)
             {
                 if (type == SMSConditionType.Start
-                    | type == SMSConditionType.Static)
+                    | type == SMSConditionType.Static
+                    | type == SMSConditionType.Input
+                    | type == SMSConditionType.Output
+                    | type == SMSConditionType.Task)
                 {
                     this.value = array[1..].GetObject(this.Parent.Association);
-                    this.Inputs.Add(new SMSBond(this.Parent, -1) { Value = this.value });
+                    if (type == SMSConditionType.Start
+                        | type == SMSConditionType.Static)
+                    {
+                        this.Inputs.Add(new SMSBond(this.Parent, -1) { Output = this, Value = this.value });
+                    }
+                    else if (type == SMSConditionType.Task
+                        && this.value is SMSTask task)
+                    {
+                        task.OutputChanged += this.TaskOnOutputChanged;
+                    }
+                    else
+                    {
+                    }
+
                     this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Value)));
                 }
             }
@@ -191,12 +230,23 @@ namespace ManagementSystemLibrary.SMS
         {
             if (this.value != value
                 && value is not null
-                && await this.GetTypeAsync().ConfigureAwait(false) is SMSConditionType type)
+                && await this.GetTypeAsync().ConfigureAwait(false) is SMSConditionType type
+                && value?.GetBytes() is IEnumerable<byte> valueArray)
             {
                 this.value = value;
                 this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Value)));
-                await this.SaveDataAsync(new byte[] { (byte)type }.Concat(this.value.GetBytes()).ToArray()).ConfigureAwait(false);
+
+                await this.SaveDataAsync(new byte[] { (byte)type }.Concat(valueArray).ToArray()).ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// Invokes the OutputChanged of the <see cref="SMSCondition"/>.
+        /// </summary>
+        /// <param name="eventArgs">The <see cref="SMSOutputEventArgs"/> of the mehtod.</param>
+        protected virtual void OnOutputChanged(SMSOutputEventArgs eventArgs)
+        {
+            this.OutputChanged?.Invoke(this, eventArgs);
         }
 
         private static void EvaluateLogicAnd(SMSBond[] inputs, SMSBond[] outputs)
@@ -375,6 +425,87 @@ namespace ManagementSystemLibrary.SMS
                 {
                     output.Value = value;
                 }
+            }
+        }
+
+        private static void EvaluateSkillUpdate(SMSBond[] inputs, SMSBond[] outputs)
+        {
+            if (inputs.FirstOrDefault(input => input.OutputIndex == 0)?.Value is bool isActive
+                && inputs.FirstOrDefault(input => input.OutputIndex == 1)?.Value is SMSSkill skill
+                && inputs.FirstOrDefault(input => input.OutputIndex == 2)?.Value is string name
+                && inputs.FirstOrDefault(input => input.OutputIndex == 3)?.Value is double amount)
+            {
+                if (isActive)
+                {
+                    Task.Run(async () =>
+                    {
+                        await SMSUpdate.CreateAsync(skill, name, amount).ConfigureAwait(false);
+                        foreach (SMSBond output in outputs)
+                        {
+                            output.Value = true;
+                        }
+                    });
+                }
+            }
+        }
+
+        private static void EvaluateIfStatement(SMSBond[] inputs, SMSBond[] outputs)
+        {
+            if (inputs.FirstOrDefault(input => input.OutputIndex == 0)?.Value is bool isActive)
+            {
+                if (isActive)
+                {
+                    foreach (SMSBond output in outputs)
+                    {
+                        output.Value = inputs.FirstOrDefault(input => input.OutputIndex == 1)?.Value;
+                    }
+                }
+            }
+        }
+
+        private static void EvaluateIfElseStatement(SMSBond[] inputs, SMSBond[] outputs)
+        {
+            if (inputs.FirstOrDefault(input => input.OutputIndex == 0)?.Value is bool isActive)
+            {
+                object? outputValue = inputs.FirstOrDefault(input => input.OutputIndex == 2)?.Value;
+                if (isActive)
+                {
+                    outputValue = inputs.FirstOrDefault(input => input.OutputIndex == 1)?.Value;
+                }
+
+                foreach (SMSBond output in outputs)
+                {
+                    output.Value = outputValue;
+                }
+            }
+        }
+
+        private static void EvaluateReset(SMSBond[] inputs, SMSBond[] outputs)
+        {
+            if (inputs.FirstOrDefault(input => input.Value is not null) is SMSBond input)
+            {
+                foreach (SMSBond output in outputs)
+                {
+                    output.Value = input.Value;
+                }
+
+                input.Value = null;
+            }
+        }
+
+        private void EvaluateTask(SMSTask task)
+        {
+            Task.Run(async () =>
+            {
+                await task.ExecuteAsync(this.Inputs.Select(input => (input.OutputIndex ?? -1, input.Value)).ToArray()).ConfigureAwait(false);
+            });
+        }
+
+        private void TaskOnOutputChanged(object? sender, SMSOutputEventArgs eventArgs)
+        {
+            foreach (SMSBond output in this.Outputs.Where(output => output.InputIndex == eventArgs.Index))
+            {
+                output.Value = eventArgs.Value;
             }
         }
     }

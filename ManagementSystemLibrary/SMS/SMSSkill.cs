@@ -96,7 +96,7 @@ namespace ManagementSystemLibrary.SMS
             if (Array.Empty<byte>() is byte[] keyArray
                 && Array.Empty<byte>() is byte[] signatureArray
                 && await association.Association.GetAccessAsync().ConfigureAwait(false) is Aes associationAccess
-                && await association.GenerateHashAsync().ConfigureAwait(false) is byte[] associationHash
+                && await association.Association.GenerateHashAsync().ConfigureAwait(false) is byte[] associationHash
                 && await MSScheduleObject<SMSSkill, SMSUpdate>.CreateAsync<SMSSkill>(association.Association, name, (PipelineItem item, NpgsqlCommand command, DateTime _, AMSAssociation _, Aes access, string _, RSA key, RSA signature, double _, double _, StringBuilder builder) =>
                 {
                     builder.Append(',')
@@ -147,22 +147,22 @@ namespace ManagementSystemLibrary.SMS
             return (await this.LoadParentsAsync<SMSConstraint, SMSSkill, AMSAssociation>().ConfigureAwait(false)).Select(id => new SMSConstraint(this, id));
         }
 
+        /// <summary>
+        /// Loads <see cref="SMSUpdate"/> related to the <see cref="SMSSkill"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task<IEnumerable<SMSUpdate>> LoadUpdatesAsync()
+        {
+            return (await this.LoadItemsAsync<SMSUpdate, SMSSkill>().ConfigureAwait(false)).Select(id => new SMSUpdate(this, id));
+        }
+
         private void GetParentReaderExecution(NpgsqlDataReader reader)
         {
             if (!reader.IsDBNull(1)
-                && this.Access is not null
-                && this.Parent is not null)
+                && this.Access is not null)
             {
                 long id = BitConverter.ToInt64(this.Access.DecryptCbc((byte[])reader[1], this.Access.IV), 0);
-                if (id == this.Parent.ID)
-                {
-                    this.parent = this.Parent;
-                }
-                else
-                {
-                    this.parent = new (this.Parent, id);
-                }
-
+                this.parent = new (this.Association, id);
                 this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Parent)));
             }
         }

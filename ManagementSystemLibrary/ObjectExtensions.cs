@@ -10,6 +10,7 @@ namespace ManagementSystemLibrary
     using System.Text;
     using ManagementSystemLibrary.AMS;
     using ManagementSystemLibrary.ManagementSystem;
+    using ManagementSystemLibrary.SMS;
 
     /// <summary>
     /// Represents extensions for several objects.
@@ -268,6 +269,11 @@ namespace ManagementSystemLibrary
             {
                 return new byte[] { 101 }.Concat(BitConverter.GetBytes(amsAccountObject.ID));
             }
+            else if (obj is SMSTask smsTaskObject
+                && smsTaskObject?.Access is not null)
+            {
+                return new byte[] { 102 }.Concat(BitConverter.GetBytes(smsTaskObject.ID).Concat(smsTaskObject.Access.Key).Concat(smsTaskObject.Access.IV).ToArray());
+            }
 
             return Array.Empty<byte>();
         }
@@ -288,33 +294,45 @@ namespace ManagementSystemLibrary
                         {
                             return BitConverter.ToBoolean(array, 1);
                         }
+
                     case 1:
                         {
                             return array[1];
                         }
+
                     case 2:
                         {
                             return BitConverter.ToInt32(array, 1);
                         }
+
                     case 3:
                         {
                             return BitConverter.ToInt64(array, 1);
                         }
+
                     case 4:
                         {
                             return BitConverter.ToDouble(array, 1);
                         }
+
                     case 5:
                         {
                             return BitConverter.ToChar(array, 1);
                         }
+
                     case 6:
                         {
                             return Encoding.Unicode.GetString(array[1..]);
                         }
+
                     case 101:
                         {
                             return new AMSAccount(association, BitConverter.ToInt64(array, 1));
+                        }
+
+                    case 102:
+                        {
+                            return new SMSTask(association, BitConverter.ToInt64(array, 1), Aes.Create().ImportKey(array[9..41], array[41..]));
                         }
                 }
             }

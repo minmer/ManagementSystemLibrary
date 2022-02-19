@@ -24,6 +24,7 @@ namespace ManagementSystemLibrary.SMS
     {
         private SMSScenario? scenario;
         private bool? scenarioVerification;
+        private bool areOutputsPrepared = false;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SMSTask"/> class.
@@ -70,6 +71,11 @@ namespace ManagementSystemLibrary.SMS
         }
 
         /// <summary>
+        /// Occurs when an output value changed.
+        /// </summary>
+        public event EventHandler<SMSOutputEventArgs>? OutputChanged;
+
+        /// <summary>
         /// Gets the <see cref="SMSScenario"/> of the <see cref="SMSTask"/>.
         /// </summary>
         public SMSScenario? Scenario
@@ -108,7 +114,7 @@ namespace ManagementSystemLibrary.SMS
                 && await MSAccessObject.CreateAsync<SMSTask>(scenario.Association, name, (PipelineItem item, NpgsqlCommand command, DateTime _, AMSAssociation _, Aes access, string _, RSA key, RSA signature, StringBuilder builder) =>
             {
                 builder.Append(',')
-                .Append(item.AddParameter(command, "scenario", NpgsqlDbType.Bytea, access.EncryptCbc(BitConverter.GetBytes(scenario.ID).Concat(access.Key).Concat(access.IV).ToArray(), access.IV)))
+                .Append(item.AddParameter(command, "scenario", NpgsqlDbType.Bytea, access.EncryptCbc(BitConverter.GetBytes(scenario.ID).Concat(scenarioAccess.Key).Concat(scenarioAccess.IV).ToArray(), access.IV)))
                 .Append(',')
                 .Append(item.AddParameter(command, "scenariohash", NpgsqlDbType.Bytea, scenarioHash))
                 .Append(',')
@@ -128,12 +134,20 @@ namespace ManagementSystemLibrary.SMS
         /// <summary>
         /// Executes the <see cref="SMSTask"/>.
         /// </summary>
+        /// <param name="inputs">The input values of the excution.</param>
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-        public async Task ExecuteAsync()
+        public async Task ExecuteAsync((int, object?)[] inputs)
         {
             if (await this.GetScenarioAsync().ConfigureAwait(false) is SMSScenario scenario)
             {
-                await scenario.ExecuteAsync().ConfigureAwait(false);
+                SMSCondition[] conditions = (await scenario.PrepareAsync().ConfigureAwait(false)).ToArray();
+                await PrepareInputsAsync(inputs, scenario, conditions).ConfigureAwait(false);
+                this.PrepareOutputs(conditions);
+
+                foreach (SMSCondition startCondition in conditions.Where(condition => condition.Type == SMSConditionType.Start))
+                {
+                    startCondition.Evaluate();
+                }
             }
         }
 
@@ -176,6 +190,42 @@ namespace ManagementSystemLibrary.SMS
             }
 
             return this.scenarioVerification;
+        }
+
+        /// <summary>
+        /// Invokes the OutputChanged of the <see cref="SMSCondition"/>.
+        /// </summary>
+        /// <param name="sender">The sender <see cref="SMSCondition"/>.</param>
+        /// <param name="eventArgs">The <see cref="SMSOutputEventArgs"/> of the mehtod.</param>
+        protected virtual void OnOutputChanged(object? sender, SMSOutputEventArgs eventArgs)
+        {
+            this.OutputChanged?.Invoke(sender, eventArgs);
+        }
+
+        private static async Task PrepareInputsAsync((int, object?)[] inputs, SMSScenario scenario, SMSCondition[] conditions)
+        {
+            foreach (SMSCondition inputCondition in conditions.Where(condition => condition.Type == SMSConditionType.Input))
+            {
+                if (await inputCondition.GetValueAsync().ConfigureAwait(false) is int index)
+                {
+                    inputCondition.Inputs.Clear();
+                    inputCondition.Inputs.AddRange(inputs.Where(input => input.Item1 == index).Select(input => new SMSBond(scenario, -1) { Output = inputCondition, Value = input.Item2 }));
+                    inputCondition.Evaluate();
+                }
+            }
+        }
+
+        private void PrepareOutputs(SMSCondition[] conditions)
+        {
+            if (!this.areOutputsPrepared)
+            {
+                foreach (SMSCondition outputCondition in conditions.Where(condition => condition.Type == SMSConditionType.Output))
+                {
+                    outputCondition.OutputChanged += this.OnOutputChanged;
+                }
+
+                this.areOutputsPrepared = true;
+            }
         }
 
         private void GetScenarioReaderExecution(NpgsqlDataReader reader)

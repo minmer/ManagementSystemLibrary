@@ -129,6 +129,7 @@ namespace ManagementSystemLibrary.Database
                 (typeof(SMSScenario), AccessObjectParameters),
                 (typeof(SMSSkill), SMSSkillParameters),
                 (typeof(SMSTask), SMSTaskParameters),
+                (typeof(SMSUpdate), TimeObjectParameters),
                 (typeof(TMSAttachment), DataObjectParameters),
                 (typeof(TMSMessage), TimeObjectParameters),
                 (typeof(TMSReadReceipt), DataObjectParameters),
@@ -157,6 +158,7 @@ namespace ManagementSystemLibrary.Database
             await CreateLinkElementAsync(pipeline, typeof(SMSConstraint)).ConfigureAwait(false);
             await CreateLinkElementAsync(pipeline, typeof(SMSContender)).ConfigureAwait(false);
             await CreateSaveTimeFunctionAsync(pipeline, typeof(TMSMessage).GetDatabaseAbbreviation()).ConfigureAwait(false);
+            await CreateSaveTimeFunctionAsync(pipeline, typeof(SMSUpdate).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateSaveTimeFunctionAsync(pipeline, typeof(PMSAppointment).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateSaveEndTimeFunctionAsync(pipeline, typeof(PMSAppointment).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateGetLinkObjectChildFunctionsAsync(pipeline, typeof(AMSDevice).GetDatabaseAbbreviation()).ConfigureAwait(false);
@@ -168,6 +170,7 @@ namespace ManagementSystemLibrary.Database
             await CreateLoadItemsFunctionsAsync(pipeline, typeof(SMSBond).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateLoadItemsFunctionsAsync(pipeline, typeof(SMSCondition).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateLoadItemsFunctionsAsync(pipeline, typeof(TMSMessage).GetDatabaseAbbreviation()).ConfigureAwait(false);
+            await CreateLoadItemsFunctionsAsync(pipeline, typeof(SMSUpdate).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateSaveDataFunctionAsync(pipeline, typeof(SMSBond).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateSaveDataFunctionAsync(pipeline, typeof(SMSCondition).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateSharedNameTableAsync(pipeline).ConfigureAwait(false);

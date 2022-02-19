@@ -14,6 +14,7 @@ namespace ManagementSystemLibrary.AMS
     using ManagementSystemLibrary.ManagementSystem;
     using ManagementSystemLibrary.Pipeline;
     using ManagementSystemLibrary.PMS;
+    using ManagementSystemLibrary.SMS;
     using ManagementSystemLibrary.TMS;
     using Npgsql;
     using NpgsqlTypes;
@@ -161,6 +162,24 @@ namespace ManagementSystemLibrary.AMS
         public async Task<IEnumerable<PMSAffiliate>> LoadPlannersAsync()
         {
             return (await this.LoadChildrenAsync<PMSAffiliate, PMSPlanner, AMSAssociation>().ConfigureAwait(false)).Select(id => new PMSAffiliate(id, this));
+        }
+
+        /// <summary>
+        /// Loads <see cref="SMSScenario"/> related to the <see cref="AMSAssociation"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task<IEnumerable<SMSContender>> LoadScenariosAsync()
+        {
+            return (await this.LoadChildrenAsync<SMSContender, SMSScenario, AMSAssociation>().ConfigureAwait(false)).Select(id => new SMSContender(id, this));
+        }
+
+        /// <summary>
+        /// Loads <see cref="SMSSkill"/> related to the <see cref="AMSAssociation"/>.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        public async Task<IEnumerable<SMSConstraint>> LoadSkillsAsync()
+        {
+            return (await this.LoadChildrenAsync<SMSConstraint, SMSSkill, AMSAssociation>().ConfigureAwait(false)).Select(id => new SMSConstraint(id, this));
         }
     }
 }
