@@ -141,12 +141,40 @@ namespace ManagementSystemLibrary.AMS
         /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
         public async Task<IEnumerable<AMSDevice>> LoadDevicesAsync()
         {
-            if (await this.GetMainAssociationAsync().ConfigureAwait(false) is AMSAssociation association)
+            List<AMSDevice> items = new ();
+            if (await this.GenerateHashAsync().ConfigureAwait(false) is not null
+                && await this.GetMainAssociationAsync().ConfigureAwait(false) is AMSAssociation association)
             {
-                return (await this.LoadItemsAsync<AMSDevice, AMSAccount>().ConfigureAwait(false)).Select(id => new AMSDevice(association, id));
+                await new PipelineItem(this.Pipeline)
+                {
+                    BatchCommand = this.LoadDevicesBatchCommand,
+                    ReaderExecution = (NpgsqlDataReader reader) =>
+                    {
+                        do
+                        {
+#pragma warning disable AV1210 // Catch a specific exception instead of Exception, SystemException or ApplicationException
+#pragma warning disable CS0168 // Variable is declared but never used
+                            try
+                            {
+                                if (!reader.IsDBNull(1)
+                                    && !reader.IsDBNull(2))
+                                {
+                                    byte[] array = this.PrivateKey.Decrypt((byte[])reader[2], Pipeline.RSAEncryptionPadding);
+                                    items.Add(new AMSDevice(association, reader.GetInt64(1), Aes.Create().ImportKey(array[..32], array[32..])));
+                                }
+                            }
+                            catch (Exception exception)
+                            {
+                            }
+#pragma warning restore CS0168 // Variable is declared but never used
+#pragma warning restore AV1210 // Catch a specific exception instead of Exception, SystemException or ApplicationException
+                        }
+                        while (reader.Read());
+                    },
+                }.ExecuteAsync().ConfigureAwait(false);
             }
 
-            return Array.Empty<AMSDevice>();
+            return items;
         }
 
         private async Task<AMSAccount> VerifyMainAssociationAsync()
@@ -189,6 +217,23 @@ namespace ManagementSystemLibrary.AMS
                     .Append(item.AddParameter(command, "creator", NpgsqlDbType.Bytea, this.MainAssociation.Access.EncryptCbc(creatorArray, this.MainAssociation.Access.IV)))
                     .Append(',')
                     .Append(item.AddParameter(command, "creatorverification", NpgsqlDbType.Bytea, this.PrivateSignature.SignData(creatorArray.Concat(BitConverter.GetBytes(this.MainAssociation.CreationTime.Value.Ticks)).ToArray(), Pipeline.HashAlgorithmName, Pipeline.RSASignaturePadding)))
+                    .Append(");");
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool LoadDevicesBatchCommand(PipelineItem item, NpgsqlCommand command)
+        {
+            if (this.Hash is not null)
+            {
+                command.CommandText += new StringBuilder("SELECT ")
+                    .Append(item.AddParameter(command, "itemid", NpgsqlDbType.Integer, item.ID))
+                    .Append(", * FROM loadamsdeviceitems(")
+                    .Append(item.AddParameter(command, "parent", NpgsqlDbType.Bytea, this.Hash))
+                    .Append(',')
+                    .Append(item.AddParameter(command, "publicparent", NpgsqlDbType.Bytea, this.PublicHash))
                     .Append(");");
                 return true;
             }

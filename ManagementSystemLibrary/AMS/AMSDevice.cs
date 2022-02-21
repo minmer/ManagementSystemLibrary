@@ -39,8 +39,9 @@ namespace ManagementSystemLibrary.AMS
         /// </summary>
         /// <param name="association">The <see cref="AMSAssociation"/> of the <see cref="AMSDevice"/>.</param>
         /// <param name="id">The identifier of the <see cref="AMSDevice"/>.</param>
-        public AMSDevice(AMSAssociation association, long id)
-            : base(association, id)
+        /// <param name="access">The <see cref="Aes"/> of the <see cref="AMSDevice"/>.</param>
+        public AMSDevice(AMSAssociation association, long id, Aes access)
+            : base(association, id, access)
         {
         }
 
@@ -101,6 +102,7 @@ namespace ManagementSystemLibrary.AMS
             await account.GenerateHashAsync().ConfigureAwait(false);
             if (Array.Empty<byte>() is byte[] keyArray
                 && Array.Empty<byte>() is byte[] signatureArray
+                && await account.GetPublicKeyAsync().ConfigureAwait(false) is RSA accountPublicKey
                 && await CreateAsync<AMSDevice>(account.Association, name, (PipelineItem item, NpgsqlCommand command, DateTime _, AMSAssociation _, Aes access, string _, RSA key, RSA signature, StringBuilder builder) =>
             {
                 builder.Append(',')
@@ -108,7 +110,7 @@ namespace ManagementSystemLibrary.AMS
                 .Append(',')
                 .Append(item.AddParameter(command, "childhash", NpgsqlDbType.Bytea, account.PublicHash))
                 .Append(',')
-                .Append(item.AddParameter(command, "parent", NpgsqlDbType.Bytea, access.EncryptCbc(BitConverter.GetBytes(account.ID), access.IV)))
+                .Append(item.AddParameter(command, "parent", NpgsqlDbType.Bytea, accountPublicKey.Encrypt(access.Key.Concat(access.IV).ToArray(), Pipeline.RSAEncryptionPadding)))
                 .Append(',')
                 .Append(item.AddParameter(command, "privateaccess", NpgsqlDbType.Bytea, RandomNumberGenerator.GetBytes(2432)))
                 .Append(',')
@@ -145,6 +147,15 @@ namespace ManagementSystemLibrary.AMS
                     BatchCommand = this.GetAccountBatchCommand,
                     ReaderExecution = this.GetAccountReaderExecution,
                 }.ExecuteAsync().ConfigureAwait(false);
+
+                if (this.ProtectedAccount is AMSAccount account)
+                {
+                    await account.GetPublicKeyAsync().ConfigureAwait(false);
+                    await new PipelineItem(this.Pipeline)
+                    {
+                        BatchCommand = this.RepairBatchCommand,
+                    }.ExecuteAsync().ConfigureAwait(false);
+                }
             }
 
             return this.ProtectedAccount;
@@ -198,13 +209,30 @@ namespace ManagementSystemLibrary.AMS
                 {
                     await new PipelineItem(this.Pipeline)
                     {
-                        BatchCommand = this.BasicGetByIDBatchCommand("verify", string.Empty),
+                        BatchCommand = this.BasicGetByIDBatchCommand("verify", "child"),
                         ReaderExecution = this.VerifyReaderExecution,
                     }.ExecuteAsync().ConfigureAwait(false);
                 }
             }
 
             return this.verification;
+        }
+
+        private bool RepairBatchCommand(PipelineItem item, NpgsqlCommand command)
+        {
+            if (this.Account?.PublicKey is not null
+                && this.Access is not null)
+            {
+                command.CommandText += new StringBuilder("UPDATE amsdevice SET parent = ")
+                    .Append(item.AddParameter(command, "parent", NpgsqlDbType.Bytea, this.Account.PublicKey.Encrypt(this.Access.Key.Concat(this.Access.IV).ToArray(), Pipeline.RSAEncryptionPadding)))
+                    .Append(" WHERE id = ")
+                    .Append(item.AddParameter(command, "id", NpgsqlDbType.Bigint, this.ID))
+                    .Append("; SELECT ")
+                    .Append(item.AddParameter(command, "itemid", NpgsqlDbType.Integer, item.ID))
+                    .Append(';');
+            }
+
+            return true;
         }
 
         private bool GetAccountBatchCommand(PipelineItem item, NpgsqlCommand command)

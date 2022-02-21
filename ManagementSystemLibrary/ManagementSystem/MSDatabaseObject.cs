@@ -259,6 +259,39 @@ namespace ManagementSystemLibrary.ManagementSystem
         }
 
         /// <summary>
+        /// Loads the <see cref="MSDataObject{T}"/> related to the <see cref="MSDatabaseObject"/>.
+        /// </summary>
+        /// <typeparam name="T1">The type of the <see cref="MSDataObject{T}"/>.</typeparam>
+        /// <typeparam name="T2">The item type of the <see cref="MSDatabaseObject"/>.</typeparam>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+        internal async Task<IEnumerable<long>> LoadPublicItemsAsync<T1, T2>()
+            where T1 : MSDatabaseObject
+            where T2 : MSDatabaseObject
+        {
+            List<long> items = new ();
+            if (this is T2)
+            {
+                await new PipelineItem(this.Pipeline)
+                {
+                    BatchCommand = this.LoadPublicItemsBatchCommand(typeof(T1).GetDatabaseAbbreviation()),
+                    ReaderExecution = (NpgsqlDataReader reader) =>
+                    {
+                        do
+                        {
+                            if (!reader.IsDBNull(1))
+                            {
+                                items.Add(reader.GetInt64(1));
+                            }
+                        }
+                        while (reader.Read());
+                    },
+                }.ExecuteAsync().ConfigureAwait(false);
+            }
+
+            return items.ToArray();
+        }
+
+        /// <summary>
         /// Creates a new <see cref="MSDatabaseObject"/>.
         /// </summary>
         /// <param name="creator">The creator <see cref="AMSAccount"/>.</param>
@@ -359,6 +392,19 @@ namespace ManagementSystemLibrary.ManagementSystem
                 }
 
                 return false;
+            };
+        }
+
+        private Func<PipelineItem, NpgsqlCommand, bool> LoadPublicItemsBatchCommand(string itemAbbreviation)
+        {
+            return (PipelineItem item, NpgsqlCommand command) =>
+            {
+                command.CommandText += new StringBuilder("SELECT ")
+                    .Append(item.AddParameter(command, "itemid", NpgsqlDbType.Integer, item.ID))
+                    .AppendFormat(", load{0}items(", itemAbbreviation)
+                    .Append(item.AddParameter(command, "parent", NpgsqlDbType.Bytea, this.PublicHash))
+                    .Append(");");
+                return true;
             };
         }
 

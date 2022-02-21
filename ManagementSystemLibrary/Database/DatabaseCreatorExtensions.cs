@@ -165,7 +165,6 @@ namespace ManagementSystemLibrary.Database
             await CreateGetLinkObjectChildFunctionsAsync(pipeline, typeof(AMSAccount).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateGiveDeviceAccessFunctionAsync(pipeline).ConfigureAwait(false);
             await CreateVerifyAMSAccountAssociationFunctionAsync(pipeline).ConfigureAwait(false);
-            await CreateLoadItemsFunctionsAsync(pipeline, typeof(AMSDevice).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateLoadItemsFunctionsAsync(pipeline, typeof(PMSAppointment).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateLoadItemsFunctionsAsync(pipeline, typeof(SMSBond).GetDatabaseAbbreviation()).ConfigureAwait(false);
             await CreateLoadItemsFunctionsAsync(pipeline, typeof(SMSCondition).GetDatabaseAbbreviation()).ConfigureAwait(false);
